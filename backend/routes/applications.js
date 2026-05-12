@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/database');
+const { notify, logActivity } = require('../automation');
 
 function generateAppNo() {
   const year = new Date().getFullYear();
@@ -72,14 +73,20 @@ router.post('/', (req, res) => {
   if (payment_mode && fee > 0) {
     db.prepare('INSERT INTO transactions (application_id, amount, mode) VALUES (?, ?, ?)').run(result.lastInsertRowid, fee, payment_mode);
   }
+  logActivity(result.lastInsertRowid, 'created', null, 'pending', 'manual');
+  notify('success', 'New Application', `Application ${app_no} submitted successfully.`, result.lastInsertRowid);
   res.status(201).json({ id: result.lastInsertRowid, application_no: app_no, message: 'Application submitted successfully' });
 });
 
 router.put('/:id/status', (req, res) => {
   const { status, remarks } = req.body;
+  const app = db.prepare('SELECT status, application_no FROM applications WHERE id=?').get(req.params.id);
+  if (!app) return res.status(404).json({ error: 'Not found' });
   const completed_at = status === 'completed' ? new Date().toISOString() : null;
   db.prepare('UPDATE applications SET status=?, remarks=?, updated_at=CURRENT_TIMESTAMP, completed_at=? WHERE id=?')
     .run(status, remarks || null, completed_at, req.params.id);
+  logActivity(req.params.id, 'status_change', app.status, status, 'manual');
+  if (status === 'completed') notify('success', 'Application Completed', `${app.application_no} has been marked as completed.`, req.params.id);
   res.json({ message: 'Status updated' });
 });
 

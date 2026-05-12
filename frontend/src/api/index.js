@@ -41,4 +41,19 @@ export const api = {
   getOperator: (id) => req(`/operators/${id}`),
   createOperator: (data) => req('/operators', { method: 'POST', body: JSON.stringify(data) }),
   updateOperator: (id, data) => req(`/operators/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Notifications
+  getNotifications: (params = {}) => req('/notifications?' + new URLSearchParams(params)),
+  markNotificationRead: (id) => req(`/notifications/${id}/read`, { method: 'PUT' }),
+  markAllNotificationsRead: () => req('/notifications/read-all', { method: 'PUT' }),
+  clearReadNotifications: () => req('/notifications/clear', { method: 'DELETE' }),
+
+  // Reports & Automation
+  getDailyReports: () => req('/reports/daily'),
+  getAutomationRules: () => req('/reports/automation-rules'),
+  toggleAutomationRule: (id) => req(`/reports/automation-rules/${id}/toggle`, { method: 'PUT' }),
+  getActivityLog: (params = {}) => req('/reports/activity-log?' + new URLSearchParams(params)),
+  getReportSummary: () => req('/reports/summary'),
+  bulkUpdateStatus: (data) => req('/reports/bulk/status', { method: 'PUT', body: JSON.stringify(data) }),
+  exportApplicationsCSV: (params = {}) => `${BASE}/reports/export/applications?` + new URLSearchParams(params),
 };

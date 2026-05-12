@@ -32,14 +32,40 @@ export default function Applications() {
   const [operators, setOperators] = useState([]);
   const [msg, setMsg] = useState(null);
   const [statusModal, setStatusModal] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [bulkModal, setBulkModal] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState('processing');
   const [form, setForm] = useState({ citizen_id: '', service_id: '', operator_id: '', fee: '', payment_mode: '', remarks: '', priority: 'normal' });
 
   const load = useCallback(() => {
     setLoading(true);
+    setSelected([]);
     api.getApplications({ search, status, page, limit: 15 })
       .then(d => { setApps(d.data); setTotal(d.total); })
       .finally(() => setLoading(false));
   }, [search, status, page]);
+
+  async function doBulkUpdate() {
+    if (!selected.length) return;
+    await api.bulkUpdateStatus({ ids: selected, status: bulkStatus });
+    setBulkModal(false);
+    setSelected([]);
+    setMsg({ type: 'success', text: `${selected.length} application(s) updated to ${bulkStatus}.` });
+    load();
+    setTimeout(() => setMsg(null), 3000);
+  }
+
+  function toggleSelect(id) {
+    setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+  }
+
+  function toggleAll() {
+    setSelected(s => s.length === apps.length ? [] : apps.map(a => a.id));
+  }
+
+  function exportCSV() {
+    window.open(api.exportApplicationsCSV({ status, from_date: '', to_date: '' }), '_blank');
+  }
 
   useEffect(() => { load(); }, [load]);
 
@@ -87,10 +113,16 @@ export default function Applications() {
           <div className="page-title">Applications</div>
           <div className="page-subtitle">{total} total applications</div>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowNew(true)}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
-          New Application
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary" onClick={exportCSV} title="Export CSV">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4 M7 10l5 5 5-5 M12 15V3"/></svg>
+            Export CSV
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowNew(true)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
+            New Application
+          </button>
+        </div>
       </div>
 
       {msg && <div className={`alert alert-${msg.type}`}>{msg.text}</div>}
@@ -102,6 +134,15 @@ export default function Applications() {
           </button>
         ))}
       </div>
+
+      {selected.length > 0 && (
+        <div style={{ background: '#1a56db', color: '#fff', padding: '10px 16px', borderRadius: 10, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600 }}>{selected.length} application(s) selected</span>
+          <button className="btn btn-secondary btn-sm" onClick={() => setBulkModal(true)}>Bulk Update Status</button>
+          <button className="btn btn-secondary btn-sm" onClick={exportCSV}>Export Selected</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setSelected([])}>Clear</button>
+        </div>
+      )}
 
       <div className="card">
         <div className="filters">
@@ -116,6 +157,7 @@ export default function Applications() {
             <table>
               <thead>
                 <tr>
+                  <th style={{ width: 32 }}><input type="checkbox" checked={selected.length === apps.length && apps.length > 0} onChange={toggleAll} /></th>
                   <th>App No.</th>
                   <th>Citizen</th>
                   <th>Service</th>
@@ -129,9 +171,10 @@ export default function Applications() {
               </thead>
               <tbody>
                 {apps.length === 0 ? (
-                  <tr><td colSpan={9}><div className="empty-state"><h3>No applications found</h3></div></td></tr>
+                  <tr><td colSpan={10}><div className="empty-state"><h3>No applications found</h3></div></td></tr>
                 ) : apps.map(a => (
-                  <tr key={a.id}>
+                  <tr key={a.id} style={{ background: selected.includes(a.id) ? '#eff6ff' : undefined }}>
+                    <td><input type="checkbox" checked={selected.includes(a.id)} onChange={() => toggleSelect(a.id)} /></td>
                     <td><span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1a56db', fontSize: 12 }}>{a.application_no}</span></td>
                     <td>
                       <div style={{ fontWeight: 600 }}>{a.citizen_name}</div>
@@ -311,6 +354,25 @@ export default function Applications() {
             <div className="detail-label">Remarks</div>
             <div className="detail-value">{detail.remarks}</div>
           </div>}
+        </Modal>
+      )}
+
+      {bulkModal && (
+        <Modal title={`Bulk Update ${selected.length} Application(s)`} onClose={() => setBulkModal(false)}
+          footer={<>
+            <button className="btn btn-secondary" onClick={() => setBulkModal(false)}>Cancel</button>
+            <button className="btn btn-primary" onClick={doBulkUpdate}>Apply</button>
+          </>}>
+          <div className="alert alert-info">You are about to update {selected.length} application(s) at once.</div>
+          <div className="form-group">
+            <label className="form-label">New Status</label>
+            <select className="form-control" value={bulkStatus} onChange={e => setBulkStatus(e.target.value)}>
+              <option value="pending">Pending</option>
+              <option value="processing">Processing</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
         </Modal>
       )}
     </div>

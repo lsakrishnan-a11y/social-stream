@@ -4,6 +4,51 @@ const path = require('path');
 const db = new Database(path.join(__dirname, 'seva.db'));
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    application_id INTEGER,
+    is_read INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS activity_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    old_value TEXT,
+    new_value TEXT,
+    triggered_by TEXT DEFAULT 'manual',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS daily_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_date TEXT UNIQUE NOT NULL,
+    total_applications INTEGER DEFAULT 0,
+    new_applications INTEGER DEFAULT 0,
+    completed_applications INTEGER DEFAULT 0,
+    pending_applications INTEGER DEFAULT 0,
+    overdue_applications INTEGER DEFAULT 0,
+    total_revenue REAL DEFAULT 0,
+    generated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS automation_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    trigger_event TEXT NOT NULL,
+    condition_field TEXT,
+    condition_value TEXT,
+    action_type TEXT NOT NULL,
+    action_value TEXT,
+    is_active INTEGER DEFAULT 1,
+    last_run DATETIME,
+    run_count INTEGER DEFAULT 0
+  );
+
   CREATE TABLE IF NOT EXISTS operators (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -161,6 +206,23 @@ if (appsCount.count === 0) {
     ['DS-2024-000010', 4, 18, 4, 'completed', 0, 'paid', 'cash', '2024-02-12 14:00:00'],
   ];
   apps.forEach(a => insertApp.run(...a));
+}
+
+// Seed automation rules
+const rulesCount = db.prepare('SELECT COUNT(*) as count FROM automation_rules').get();
+if (rulesCount.count === 0) {
+  const insertRule = db.prepare(`
+    INSERT INTO automation_rules (name, trigger_event, condition_field, condition_value, action_type, action_value, is_active)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  [
+    ['Auto-Escalate Pending', 'schedule_hourly', 'pending_hours', '2', 'change_status', 'processing', 1],
+    ['Flag Overdue Applications', 'schedule_6h', 'overdue_days', '0', 'flag_overdue', 'urgent', 1],
+    ['Daily Summary Report', 'schedule_daily', null, null, 'generate_report', null, 1],
+    ['Notify on Completion', 'status_change', 'new_status', 'completed', 'send_notification', 'Application completed! Visit the center to collect your certificate.', 1],
+    ['Notify New Submission', 'new_application', null, null, 'send_notification', 'Your application has been received and is being processed.', 1],
+    ['Auto-Complete Bill Payments', 'schedule_hourly', 'service_type', 'bill_payment', 'change_status', 'completed', 1],
+  ].forEach(r => insertRule.run(...r));
 }
 
 module.exports = db;
